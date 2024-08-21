@@ -5,6 +5,10 @@ pipeline {
         BACKEND_IMAGE = "yassird/expense-manager-backend"
         FRONTEND_IMAGE = "yassird/expense-manager-frontend"
         BUILD_TAG = "${BUILD_ID}" // Use the Jenkins build ID as the tag
+        DOCKER_COMPOSE_FILE = 'docker-compose.yml'
+        GCP_VM_USER = 'yassirdiri'
+        GCP_VM_IP = '35.225.130.175'
+        GCP_SSH_KEY_ID = 'yassirdiri' // Replace with your Jenkins SSH credentials ID
     }
     
     stages {
@@ -40,6 +44,7 @@ pipeline {
                 '''
             }
         }
+
         
         stage('Build Backend Docker Image') {
             steps {
@@ -63,6 +68,51 @@ pipeline {
                 sh 'docker push ${FRONTEND_IMAGE}:${BUILD_TAG}'
             }
         }
+
+        stage('Update Docker Compose File') {
+            steps {
+                script {
+                    def composeFile = readFile(DOCKER_COMPOSE_FILE)
+                    
+                    // Escape dollar signs and brackets for Groovy string interpolation
+                    def backendImagePattern = /(image: ${BACKEND_IMAGE}:)\S+/
+                    def frontendImagePattern = /(image: ${FRONTEND_IMAGE}:)\S+/
+                    
+                    composeFile = composeFile.replaceAll(backendImagePattern, "\$1${BUILD_TAG}")
+                    composeFile = composeFile.replaceAll(frontendImagePattern, "\$1${BUILD_TAG}")
+                    
+                    writeFile file: DOCKER_COMPOSE_FILE, text: composeFile
+
+                    // Print the updated docker-compose.yml file to the console
+                    echo 'Updated docker-compose.yml file:'
+                    sh 'cat ${DOCKER_COMPOSE_FILE}'
+                }
+            }
+        }
+
+        stage('Deploy to GCP VM') {
+            steps {
+                script {
+                    sshagent([GCP_SSH_KEY_ID]) {
+                        sh "scp -o StrictHostKeyChecking=no ${DOCKER_COMPOSE_FILE} ${GCP_VM_USER}@${GCP_VM_IP}:~/"
+                        
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "docker compose down --rmi all"
+                        '''
+
+                        // SSH into the VM and pull the latest images
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "docker compose pull"
+                        '''
+
+                        // SSH into the VM and rebuild and restart containers
+                        sh '''
+                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "docker compose up --build -d"
+                        '''
+                    }
+                }
+            }
+        }
     }
     
     post {
@@ -71,10 +121,10 @@ pipeline {
             sh 'docker rmi ${FRONTEND_IMAGE}:${BUILD_TAG} || true'
         }
         success {
-            echo 'Build completed successfully!'
+            echo 'Build and deployment completed successfully!'
         }
         failure {
-            echo 'Build failed. Please check the logs.'
+            echo 'Build or deployment failed. Please check the logs.'
         }
     }
 }
