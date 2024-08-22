@@ -1,0 +1,40 @@
+---
+- name: Sauvegarde de la base de données MySQL depuis Docker
+  hosts: localhost
+  vars:
+    docker_container_name: my_mysql_atest
+    mysql_user: rihab
+    mysql_password: rihab2001
+    mysql_database: my_new_database
+    backup_dir: "{{ ansible_env.HOME }}/sauvegardes_mysql"
+    backup_filename: "sauvegarde_mysql_{{ ansible_date_time.date }}.sql"
+
+  tasks:
+    - name: S'assurer que le répertoire de sauvegarde existe
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Sauvegarder la base de données MySQL
+      command: >
+        docker exec {{ docker_container_name }}
+        mysqldump -u{{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }}
+      register: mysql_backup
+
+    - name: Enregistrer la sauvegarde dans un fichier
+      copy:
+        content: "{{ mysql_backup.stdout }}"
+        dest: "{{ backup_dir }}/{{ backup_filename }}"
+        mode: '0644'
+
+    - name: Compresser le fichier de sauvegarde
+      archive:
+        path: "{{ backup_dir }}/{{ backup_filename }}"
+        dest: "{{ backup_dir }}/{{ backup_filename }}.gz"
+        format: gz
+
+    - name: Supprimer le fichier de sauvegarde non compressé
+      file:
+        path: "{{ backup_dir }}/{{ backup_filename }}"
+        state: absent

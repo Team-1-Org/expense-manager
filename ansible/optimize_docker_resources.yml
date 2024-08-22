@@ -1,0 +1,69 @@
+---
+- name: Optimize Docker container resource usage
+  hosts: your_target_host
+  vars:
+    docker_compose_file: /path/to/your/docker-compose.yml
+    containers:
+      - your_app_container
+      - your_db_container
+
+  tasks:
+    # Tâche pour réduire la consommation à 50% de 18h à 21h du lundi au vendredi
+    - name: Set up cron job to reduce container resources at 18:00 on weekdays
+      cron:
+        name: "Reduce container resources"
+        weekday: "1-5"
+        hour: "18"
+        minute: "0"
+        job: >
+          docker update --cpus=0.5 --memory=512M {{ containers | join(' ') }}
+
+    # Tâche pour arrêter les conteneurs à 21h du lundi au vendredi
+    - name: Set up cron job to stop containers at 21:00 on weekdays
+      cron:
+        name: "Stop containers"
+        weekday: "1-5"
+        hour: "21"
+        minute: "0"
+        job: >
+          docker-compose -f {{ docker_compose_file }} down
+
+    # Tâche pour démarrer les conteneurs à 8h du lundi au vendredi
+    - name: Set up cron job to start containers at 08:00 on weekdays
+      cron:
+        name: "Start containers"
+        weekday: "1-5"
+        hour: "8"
+        minute: "0"
+        job: >
+          docker-compose -f {{ docker_compose_file }} up -d
+
+    # Tâche pour restaurer les ressources complètes à 8h du lundi au vendredi
+    - name: Set up cron job to restore full container resources at 08:00 on weekdays
+      cron:
+        name: "Restore full container resources"
+        weekday: "1-5"
+        hour: "8"
+        minute: "1"
+        job: >
+          docker update --cpus=1 --memory=1G {{ containers | join(' ') }}
+
+    # Tâche pour arrêter les conteneurs le vendredi à 21h
+    - name: Set up cron job to stop containers on Friday at 21:00
+      cron:
+        name: "Stop containers for weekend"
+        weekday: "5"
+        hour: "21"
+        minute: "0"
+        job: >
+          docker-compose -f {{ docker_compose_file }} down
+
+    # Tâche pour démarrer les conteneurs le lundi à 8h
+    - name: Set up cron job to start containers on Monday at 08:00
+      cron:
+        name: "Start containers after weekend"
+        weekday: "1"
+        hour: "8"
+        minute: "0"
+        job: >
+          docker-compose -f {{ docker_compose_file }} up -d

@@ -1,0 +1,98 @@
+---
+- name: Install and Start Minikube on Ubuntu WSL
+  hosts: localhost
+  connection: local
+  become: yes
+  become_method: sudo
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install dependencies without virtualbox-ext-pack
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - virtualbox
+        state: present
+
+    - name: Download Minikube binary
+      get_url:
+        url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+
+    - name: Download kubectl version information
+      get_url:
+        url: https://storage.googleapis.com/kubernetes-release/release/stable.txt
+        dest: /tmp/stable.txt
+
+    - name: Install kubectl
+      get_url:
+        url: "https://storage.googleapis.com/kubernetes-release/release/{{ lookup('file', '/tmp/stable.txt') | trim }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: '0755'
+
+    - name: Create .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        state: directory
+        mode: '0755'
+
+    - name: Ensure Docker group exists
+      group:
+        name: docker
+        state: present
+
+    - name: Add current user to docker group
+      user:
+        name: "{{ ansible_env.USER }}"
+        groups: docker
+        append: yes
+
+    - name: Restart Docker service
+      systemd:
+        name: docker
+        state: restarted
+
+    - name: Reset connection to apply group changes
+      meta: reset_connection
+
+    - name: Start Minikube with Docker driver
+      become: no
+      command: minikube start --driver=docker
+      register: minikube_start
+      changed_when: "'Starting control plane' in minikube_start.stdout"
+
+    - name: Get Minikube status
+      become: no
+      command: minikube status
+      register: minikube_status
+      changed_when: false
+
+    - name: Display Minikube status
+      debug:
+        var: minikube_status.stdout_lines
+
+    - name: Create sudoers.d file for Minikube
+      copy:
+        content: "{{ ansible_env.USER }} ALL=(ALL) NOPASSWD: /usr/local/bin/minikube, /usr/local/bin/kubectl"
+        dest: /etc/sudoers.d/minikube
+        mode: '0440'
+
+    - name: Ensure proper permissions for .kube directory
+      file:
+        path: "{{ ansible_env.HOME }}/.kube"
+        owner: "{{ ansible_env.USER }}"
+        group: "{{ ansible_env.USER }}"
+        mode: '0755'
+        recurse: yes
+
+    - name: Inform user about group changes
+      debug:
+        msg: "Docker group changes have been applied. You may need to log out and log back in for them to take effect."
+
