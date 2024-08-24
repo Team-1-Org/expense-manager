@@ -1,69 +1,45 @@
 ---
-- name: Optimize Docker container resource usage
-  hosts: your_target_host
+- name: Sauvegarde de la base de données MySQL depuis Docker Swarm
+  hosts: gcp_vms
   vars:
-    docker_compose_file: /path/to/your/docker-compose.yml
-    containers:
-      - your_app_container
-      - your_db_container
+    mysql_user: root
+    mysql_password: root
+    mysql_database: expense_manager
+    backup_dir: "/home/{{ ansible_ssh_user }}/sauvegardes_mysql"
+    backup_filename: "sauvegarde_mysql_{{ ansible_date_time.date }}.sql"
+    service_name: expense-manager_db
 
   tasks:
-    # Tâche pour réduire la consommation à 50% de 18h à 21h du lundi au vendredi
-    - name: Set up cron job to reduce container resources at 18:00 on weekdays
-      cron:
-        name: "Reduce container resources"
-        weekday: "1-5"
-        hour: "18"
-        minute: "0"
-        job: >
-          docker update --cpus=0.5 --memory=512M {{ containers | join(' ') }}
+    - name: S'assurer que le répertoire de sauvegarde existe
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
 
-    # Tâche pour arrêter les conteneurs à 21h du lundi au vendredi
-    - name: Set up cron job to stop containers at 21:00 on weekdays
-      cron:
-        name: "Stop containers"
-        weekday: "1-5"
-        hour: "21"
-        minute: "0"
-        job: >
-          docker-compose -f {{ docker_compose_file }} down
+    - name: Trouver le conteneur MySQL en cours d'exécution
+      shell: >
+        docker ps --filter name={{ service_name }} --format '{% raw %}{{.Names}}{% endraw %}' | head -n1
+      register: container_name
 
-    # Tâche pour démarrer les conteneurs à 8h du lundi au vendredi
-    - name: Set up cron job to start containers at 08:00 on weekdays
-      cron:
-        name: "Start containers"
-        weekday: "1-5"
-        hour: "8"
-        minute: "0"
-        job: >
-          docker-compose -f {{ docker_compose_file }} up -d
+    - name: Sauvegarder la base de données MySQL
+      command: >
+        docker exec {{ container_name.stdout }}
+        mysqldump -u{{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }}
+      register: mysql_backup
 
-    # Tâche pour restaurer les ressources complètes à 8h du lundi au vendredi
-    - name: Set up cron job to restore full container resources at 08:00 on weekdays
-      cron:
-        name: "Restore full container resources"
-        weekday: "1-5"
-        hour: "8"
-        minute: "1"
-        job: >
-          docker update --cpus=1 --memory=1G {{ containers | join(' ') }}
+    - name: Enregistrer la sauvegarde dans un fichier
+      copy:
+        content: "{{ mysql_backup.stdout }}"
+        dest: "{{ backup_dir }}/{{ backup_filename }}"
+        mode: '0644'
 
-    # Tâche pour arrêter les conteneurs le vendredi à 21h
-    - name: Set up cron job to stop containers on Friday at 21:00
-      cron:
-        name: "Stop containers for weekend"
-        weekday: "5"
-        hour: "21"
-        minute: "0"
-        job: >
-          docker-compose -f {{ docker_compose_file }} down
+    - name: Compresser le fichier de sauvegarde
+      archive:
+        path: "{{ backup_dir }}/{{ backup_filename }}"
+        dest: "{{ backup_dir }}/{{ backup_filename }}.gz"
+        format: gz
 
-    # Tâche pour démarrer les conteneurs le lundi à 8h
-    - name: Set up cron job to start containers on Monday at 08:00
-      cron:
-        name: "Start containers after weekend"
-        weekday: "1"
-        hour: "8"
-        minute: "0"
-        job: >
-          docker-compose -f {{ docker_compose_file }} up -d
+    - name: Supprimer le fichier de sauvegarde non compressé
+      file:
+        path: "{{ backup_dir }}/{{ backup_filename }}"
+        state: absent

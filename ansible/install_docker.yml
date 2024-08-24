@@ -1,21 +1,10 @@
 ---
-- name: Install and Start Docker on Ubuntu WSL
-  hosts: localhost
-  connection: local
+- name: Install and Start Docker on GCP VM
+  hosts: gcp_vms
   become: yes
   become_method: sudo
 
   tasks:
-    - name: Ensure WSL version is 2
-      shell: |
-        if grep -q "WSL2" /proc/version; then
-          echo "WSL2 detected"
-        else
-          echo "WSL2 is required for Docker to run."
-          exit 1
-        fi
-      changed_when: false
-
     - name: Remove existing Docker installations
       apt:
         name:
@@ -108,4 +97,3 @@
     - name: Inform user about group changes
       debug:
         msg: "Docker installation complete. You may need to log out and log back in for group changes to take effect."
-
