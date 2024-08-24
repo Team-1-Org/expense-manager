@@ -5,10 +5,11 @@ pipeline {
         BACKEND_IMAGE = "yassird/expense-manager-backend"
         FRONTEND_IMAGE = "yassird/expense-manager-frontend"
         BUILD_TAG = "${BUILD_ID}" // Use the Jenkins build ID as the tag
-        DOCKER_COMPOSE_FILE = 'docker-compose.yml'
+        DOCKER_STACK_FILE = 'docker-stack.yml' // Swarm-compatible compose file
         GCP_VM_USER = 'yassirdiri'
-        GCP_VM_IP = '35.225.130.175'
+        GCP_VM_IP = '34.173.250.63'
         GCP_SSH_KEY_ID = 'yassirdiri' // Replace with your Jenkins SSH credentials ID
+        SWARM_STACK_NAME = 'expense-manager' // Name of the Swarm stack
     }
     
     stages {
@@ -44,7 +45,6 @@ pipeline {
                 '''
             }
         }
-
         
         stage('Build Backend Docker Image') {
             steps {
@@ -69,45 +69,39 @@ pipeline {
             }
         }
 
-        stage('Update Docker Compose File') {
+        stage('Update Docker Stack File') {
             steps {
                 script {
-                    def composeFile = readFile(DOCKER_COMPOSE_FILE)
+                    def stackFile = readFile(DOCKER_STACK_FILE)
                     
                     // Escape dollar signs and brackets for Groovy string interpolation
                     def backendImagePattern = /(image: ${BACKEND_IMAGE}:)\S+/
                     def frontendImagePattern = /(image: ${FRONTEND_IMAGE}:)\S+/
                     
-                    composeFile = composeFile.replaceAll(backendImagePattern, "\$1${BUILD_TAG}")
-                    composeFile = composeFile.replaceAll(frontendImagePattern, "\$1${BUILD_TAG}")
+                    stackFile = stackFile.replaceAll(backendImagePattern, "\$1${BUILD_TAG}")
+                    stackFile = stackFile.replaceAll(frontendImagePattern, "\$1${BUILD_TAG}")
                     
-                    writeFile file: DOCKER_COMPOSE_FILE, text: composeFile
+                    writeFile file: DOCKER_STACK_FILE, text: stackFile
 
-                    // Print the updated docker-compose.yml file to the console
-                    echo 'Updated docker-compose.yml file:'
-                    sh 'cat ${DOCKER_COMPOSE_FILE}'
+                    // Print the updated docker-stack.yml file to the console
+                    echo 'Updated docker-stack.yml file:'
+                    sh 'cat ${DOCKER_STACK_FILE}'
                 }
             }
         }
 
-        stage('Deploy to GCP VM') {
+        stage('Deploy to GCP VM using Docker Swarm') {
             steps {
                 script {
                     sshagent([GCP_SSH_KEY_ID]) {
-                        sh "scp -o StrictHostKeyChecking=no ${DOCKER_COMPOSE_FILE} ${GCP_VM_USER}@${GCP_VM_IP}:~/"
+                        // Copy updated stack file to the GCP VM
+                        sh "scp -o StrictHostKeyChecking=no ${DOCKER_STACK_FILE} ${GCP_VM_USER}@${GCP_VM_IP}:~/"
                         
+                        // Deploy the stack to Docker Swarm
                         sh '''
-                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "docker compose down --rmi all"
-                        '''
-
-                        // SSH into the VM and pull the latest images
-                        sh '''
-                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "docker compose pull"
-                        '''
-
-                        // SSH into the VM and rebuild and restart containers
-                        sh '''
-                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "docker compose up --build -d"
+                            ssh -o StrictHostKeyChecking=no ${GCP_VM_USER}@${GCP_VM_IP} "
+                                docker stack deploy -c ~/docker-stack.yml ${SWARM_STACK_NAME}
+                            "
                         '''
                     }
                 }
