@@ -1,13 +1,13 @@
 ---
-- name: Sauvegarde de la base de données MySQL depuis Docker
-  hosts: localhost
+- name: Sauvegarde de la base de données MySQL depuis Docker Swarm
+  hosts: gcp_vms
   vars:
-    docker_container_name: my_mysql_atest
-    mysql_user: rihab
-    mysql_password: rihab2001
-    mysql_database: my_new_database
-    backup_dir: "{{ ansible_env.HOME }}/sauvegardes_mysql"
+    mysql_user: root
+    mysql_password: root
+    mysql_database: expense_manager
+    backup_dir: "/home/{{ ansible_ssh_user }}/sauvegardes_mysql"
     backup_filename: "sauvegarde_mysql_{{ ansible_date_time.date }}.sql"
+    service_name: expense-manager_db
 
   tasks:
     - name: S'assurer que le répertoire de sauvegarde existe
@@ -16,9 +16,14 @@
         state: directory
         mode: '0755'
 
+    - name: Trouver le conteneur MySQL en cours d'exécution
+      shell: >
+        docker ps --filter name={{ service_name }} --format '{% raw %}{{.Names}}{% endraw %}' | head -n1
+      register: container_name
+
     - name: Sauvegarder la base de données MySQL
       command: >
-        docker exec {{ docker_container_name }}
+        docker exec {{ container_name.stdout }}
         mysqldump -u{{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }}
       register: mysql_backup
 

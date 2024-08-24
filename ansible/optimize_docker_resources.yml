@@ -1,45 +1,62 @@
 ---
-- name: Sauvegarde de la base de données MySQL depuis Docker Swarm
+- name: Manage Docker Swarm services and set up cron jobs
   hosts: gcp_vms
+  become: yes
   vars:
-    mysql_user: root
-    mysql_password: root
-    mysql_database: expense_manager
-    backup_dir: "/home/{{ ansible_ssh_user }}/sauvegardes_mysql"
-    backup_filename: "sauvegarde_mysql_{{ ansible_date_time.date }}.sql"
-    service_name: expense-manager_db
+    docker_compose_file: /home/yassirdiri/docker-stack.yml
+    services:
+      - expense-manager_backend
+      - expense-manager_frontend
+    weekday_days: "1-5"  # Monday to Friday
+    off_hours_start: "21:00"
+    off_hours_end: "08:00"
+    reduced_resources_start: "18:00"
+    reduced_resources_end: "21:00"
+    normal_resources_replicas: 2
+    reduced_resources_replicas: 1
 
   tasks:
-    - name: S'assurer que le répertoire de sauvegarde existe
-      file:
-        path: "{{ backup_dir }}"
-        state: directory
-        mode: '0755'
+    # Immediately stop services if running on the weekend
+    - name: Stop all services if today is Saturday or Sunday
+      command: docker stack rm expense-manager
+      when: ansible_date_time.iso8601[8:10] in ["06", "07"]
 
-    - name: Trouver le conteneur MySQL en cours d'exécution
-      shell: >
-        docker ps --filter name={{ service_name }} --format '{% raw %}{{.Names}}{% endraw %}' | head -n1
-      register: container_name
+    # Create cron job to start all services at 08:00 on weekdays
+    - name: Create cron job to start all services at 08:00 on weekdays
+      cron:
+        name: "Start all services at 08:00 on weekdays"
+        minute: "0"
+        hour: "8"
+        weekday: "{{ weekday_days }}"
+        job: >
+          docker stack deploy -c {{ docker_compose_file }} expense-manager
 
-    - name: Sauvegarder la base de données MySQL
-      command: >
-        docker exec {{ container_name.stdout }}
-        mysqldump -u{{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }}
-      register: mysql_backup
+    # Create cron job to scale down services at 18:00 on weekdays
+    - name: Create cron job to scale down services at 18:00 on weekdays
+      cron:
+        name: "Scale down services at 18:00 on weekdays"
+        minute: "0"
+        hour: "18"
+        weekday: "{{ weekday_days }}"
+        job: >
+          docker service update --replicas={{ reduced_resources_replicas }} {{ services | join(' ') }}
 
-    - name: Enregistrer la sauvegarde dans un fichier
-      copy:
-        content: "{{ mysql_backup.stdout }}"
-        dest: "{{ backup_dir }}/{{ backup_filename }}"
-        mode: '0644'
+    # Create cron job to stop all services at 21:00 on weekdays (including Friday)
+    - name: Create cron job to stop all services at 21:00 on weekdays
+      cron:
+        name: "Stop all services at 21:00 on weekdays"
+        minute: "0"
+        hour: "21"
+        weekday: "{{ weekday_days }}"
+        job: >
+          docker stack rm expense-manager
 
-    - name: Compresser le fichier de sauvegarde
-      archive:
-        path: "{{ backup_dir }}/{{ backup_filename }}"
-        dest: "{{ backup_dir }}/{{ backup_filename }}.gz"
-        format: gz
-
-    - name: Supprimer le fichier de sauvegarde non compressé
-      file:
-        path: "{{ backup_dir }}/{{ backup_filename }}"
-        state: absent
+    # Create cron job to ensure services are running at 08:00 on Monday
+    - name: Create cron job to ensure services are running at 08:00 on Monday
+      cron:
+        name: "Ensure services running at 08:00 on Monday"
+        minute: "0"
+        hour: "8"
+        weekday: "1"
+        job: >
+          docker stack deploy -c {{ docker_compose_file }} expense-manager
