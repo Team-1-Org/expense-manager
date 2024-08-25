@@ -6,7 +6,7 @@ function SalaryInput({ onSalaryChange }) {
   useEffect(() => {
     const fetchSalary = async () => {
       try {
-        const response = await fetch(`http://34.45.160.206:5000/salary`);
+        const response = await fetch(`http://35.224.231.81:5000/salary`);
         const amount = await response.json();
         setSalary(amount);
         onSalaryChange(amount);
@@ -24,7 +24,7 @@ function SalaryInput({ onSalaryChange }) {
     onSalaryChange(newSalary);
 
     try {
-      await fetch(`http://34.45.160.206:5000/salary`, {
+      await fetch(`http://35.224.231.81:5000/salary`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
