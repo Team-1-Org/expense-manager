@@ -58,6 +58,34 @@ function testDbConnection(callback) {
   });
 }
 
+// Function to initialize database tables
+function initializeTables(callback) {
+  const createSalaryTable = `
+    CREATE TABLE IF NOT EXISTS salary (
+      id INT PRIMARY KEY,
+      amount DECIMAL(10,2) NOT NULL
+    );
+  `;
+
+  const createExpensesTable = `
+    CREATE TABLE IF NOT EXISTS expenses (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      description VARCHAR(255) NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      date DATE NOT NULL,
+      category VARCHAR(255) NOT NULL
+    );
+  `;
+
+  pool.query(createSalaryTable, (err) => {
+    if (err) return callback(err);
+    pool.query(createExpensesTable, (err) => {
+      if (err) return callback(err);
+      callback(null);
+    });
+  });
+}
+
 // Middleware to track metrics for all routes
 app.use((req, res, next) => {
   const start = Date.now();
@@ -161,12 +189,19 @@ app.get('/metrics', async (req, res) => {
   res.end(await client.register.metrics());
 });
 
-// Start the app
-if (process.env.NODE_ENV !== 'test') {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+// Initialize tables and start the app
+initializeTables((err) => {
+  if (err) {
+    console.error('Error initializing database tables:', err);
+    process.exit(1);
+  }
+  
+  if (process.env.NODE_ENV !== 'test') {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
+});
 
 module.exports = app;
