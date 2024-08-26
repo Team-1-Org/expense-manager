@@ -7,7 +7,7 @@ pipeline {
         BUILD_TAG = "${BUILD_ID}" // Use the Jenkins build ID as the tag
         DOCKER_STACK_FILE = 'docker-stack.yml' // Swarm-compatible compose file
         GCP_VM_USER = 'yassirdiri'
-        GCP_VM_IP = '34.132.250.98'
+        GCP_VM_IP = '34.30.18.88'
         GCP_SSH_KEY_ID = 'yassirdiri' // Replace with your Jenkins SSH credentials ID
         SWARM_STACK_NAME = 'expense-manager' // Name of the Swarm stack
     }
