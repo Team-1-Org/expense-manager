@@ -1,6 +1,6 @@
 ---
 - name: Manage Docker Swarm services and set up cron jobs
-  hosts: gcp_vms
+  hosts: app_vms
   become: yes
   vars:
     docker_compose_file: /home/yassirdiri/docker-stack.yml
