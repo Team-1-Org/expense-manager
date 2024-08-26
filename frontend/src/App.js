@@ -11,7 +11,7 @@ function App() {
 
   useEffect(() => {
     const fetchExpenses = async () => {
-      const response = await fetch(`http://34.132.250.98:5000/expenses`);
+      const response = await fetch(`http://34.30.18.88:5000/expenses`);
       const data = await response.json();
       setExpenses(data);
     };
@@ -20,7 +20,7 @@ function App() {
   }, []);
 
   const handleAddExpense = async (expense) => {
-    const response = await fetch(`http://34.132.250.98:5000/expenses`, {
+    const response = await fetch(`http://34.30.18.88:5000/expenses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
