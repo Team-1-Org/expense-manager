@@ -5,6 +5,9 @@ provider "google" {
   zone        = "us-central1-a"
 }
 
+# Data source to get project details
+data "google_project" "project" {}
+
 # Networking resources
 resource "google_compute_network" "vpc_network" {
   name                    = "my-app-network"
@@ -45,6 +48,7 @@ resource "google_compute_firewall" "needed-ports" {
       "9090",   # Prometheus
       "3000",   # Grafana
       "9093",   # Alert Manager
+      "5001",   #alert webhook
     ]
   }
 
@@ -158,23 +162,53 @@ resource "google_cloudfunctions_function" "start_vms" {
 resource "google_cloud_scheduler_job" "stop_vms_scheduler" {
   name        = "stop-vms-scheduler"
   description = "Schedule to stop VMs at 9:30 PM Casablanca time"
-  schedule    = "30 21 * * 1-5"  # 9:30 PM from Monday to Friday
-  time_zone   = "Africa/Casablanca"  # Casablanca time zone
+  schedule    = "30 21 * * 1-5"
+  time_zone   = "Africa/Casablanca"
 
   http_target {
     http_method = "POST"
     uri         = google_cloudfunctions_function.stop_vms.https_trigger_url
+    oidc_token {
+      service_account_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+    }
   }
 }
 
 resource "google_cloud_scheduler_job" "start_vms_scheduler" {
   name        = "start-vms-scheduler"
   description = "Schedule to start VMs at 7:30 AM Casablanca time"
-  schedule    = "30 7 * * 1-5"  # 7:30 AM from Monday to Friday
-  time_zone   = "Africa/Casablanca"  # Casablanca time zone
+  schedule    = "30 7 * * 1-5"
+  time_zone   = "Africa/Casablanca"
 
   http_target {
     http_method = "POST"
     uri         = google_cloudfunctions_function.start_vms.https_trigger_url
+    oidc_token {
+      service_account_email = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+    }
   }
+}
+
+# New IAM bindings for Cloud Scheduler and Cloud Functions
+
+resource "google_cloudfunctions_function_iam_member" "invoker_start" {
+  project        = data.google_project.project.project_id
+  region         = google_cloudfunctions_function.start_vms.region
+  cloud_function = google_cloudfunctions_function.start_vms.name
+  role           = "roles/cloudfunctions.invoker"
+  member         = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_cloudfunctions_function_iam_member" "invoker_stop" {
+  project        = data.google_project.project.project_id
+  region         = google_cloudfunctions_function.stop_vms.region
+  cloud_function = google_cloudfunctions_function.stop_vms.name
+  role           = "roles/cloudfunctions.invoker"
+  member         = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "function_compute_admin" {
+  project = data.google_project.project.project_id
+  role    = "roles/compute.instanceAdmin.v1"
+  member  = "serviceAccount:${data.google_project.project.project_id}@appspot.gserviceaccount.com"
 }
