@@ -14,7 +14,7 @@ services:
     deploy:
       replicas: 1
       restart_policy:
-        condition: on-failure
+        condition: any
 
   # Node.js Backend
   backend:
@@ -34,7 +34,7 @@ services:
     deploy:
       replicas: 2
       restart_policy:
-        condition: on-failure
+        condition: any
 
   # React Frontend
   frontend:
@@ -48,7 +48,7 @@ services:
     deploy:
       replicas: 2
       restart_policy:
-        condition: on-failure
+        condition: any
 
 networks:
   app-network:
