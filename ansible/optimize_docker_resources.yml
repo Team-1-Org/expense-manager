@@ -1,0 +1,62 @@
+---
+- name: Manage Docker Swarm services and set up cron jobs
+  hosts: app_vms
+  become: yes
+  vars:
+    docker_compose_file: /home/yassirdiri/docker-stack.yml
+    services:
+      - expense-manager_backend
+      - expense-manager_frontend
+    weekday_days: "1-5"  # Monday to Friday
+    off_hours_start: "21:00"
+    off_hours_end: "08:00"
+    reduced_resources_start: "18:00"
+    reduced_resources_end: "21:00"
+    normal_resources_replicas: 2
+    reduced_resources_replicas: 1
+
+  tasks:
+    # Immediately stop services if running on the weekend
+    - name: Stop all services if today is Saturday or Sunday
+      command: docker stack rm expense-manager
+      when: ansible_date_time.iso8601[8:10] in ["06", "07"]
+
+    # Create cron job to start all services at 08:00 on weekdays
+    - name: Create cron job to start all services at 08:00 on weekdays
+      cron:
+        name: "Start all services at 08:00 on weekdays"
+        minute: "0"
+        hour: "8"
+        weekday: "{{ weekday_days }}"
+        job: >
+          docker stack deploy -c {{ docker_compose_file }} expense-manager
+
+    # Create cron job to scale down services at 18:00 on weekdays
+    - name: Create cron job to scale down services at 18:00 on weekdays
+      cron:
+        name: "Scale down services at 18:00 on weekdays"
+        minute: "0"
+        hour: "18"
+        weekday: "{{ weekday_days }}"
+        job: >
+          docker service update --replicas={{ reduced_resources_replicas }} {{ services | join(' ') }}
+
+    # Create cron job to stop all services at 21:00 on weekdays (including Friday)
+    - name: Create cron job to stop all services at 21:00 on weekdays
+      cron:
+        name: "Stop all services at 21:00 on weekdays"
+        minute: "0"
+        hour: "21"
+        weekday: "{{ weekday_days }}"
+        job: >
+          docker stack rm expense-manager
+
+    # Create cron job to ensure services are running at 08:00 on Monday
+    - name: Create cron job to ensure services are running at 08:00 on Monday
+      cron:
+        name: "Ensure services running at 08:00 on Monday"
+        minute: "0"
+        hour: "8"
+        weekday: "1"
+        job: >
+          docker stack deploy -c {{ docker_compose_file }} expense-manager

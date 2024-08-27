@@ -1,0 +1,67 @@
+- name: Sauvegarde de la base de données MySQL depuis Docker
+  hosts: localhost
+  vars:
+    docker_container_name: my_mysql_atest
+    mysql_user: rihab
+    mysql_password: rihab2001
+    mysql_database: my_new_database
+    backup_dir: "{{ ansible_env.HOME }}/sauvegardes_mysql"
+    backup_filename: "sauvegarde_mysql_{{ ansible_date_time.date }}_{{ ansible_date_time.hour }}h{{ ansible_date_time.minute }}m.sql"
+    cron_user: "{{ ansible_user_id }}"  # Utilisateur courant
+
+  tasks:
+    - name: S'assurer que le répertoire de sauvegarde existe
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Démarrer le conteneur MySQL si nécessaire
+      docker_container:
+        name: "{{ docker_container_name }}"
+        state: started
+
+    - name: Attendre que le conteneur MySQL soit prêt
+      shell: |
+        while ! docker exec {{ docker_container_name }} mysqladmin ping -u{{ mysql_user }} -p{{ mysql_password }} --silent; do
+          sleep 2
+        done
+
+    - name: Créer une tâche cron pour la sauvegarde chaque vendredi à 17h
+      cron:
+        name: "Sauvegarde hebdomadaire MySQL"
+        minute: "0"
+        hour: "17"
+        day: "*"
+        month: "*"
+        weekday: "5"
+        job: >
+          docker exec {{ docker_container_name }} mysqldump -u{{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }} |
+          gzip > {{ backup_dir }}/sauvegarde_mysql_`date +\%Y-\%m-\%d_\%Hh\%Mm\%Ss`.sql.gz
+
+    - name: Sauvegarder immédiatement la base de données MySQL
+      command: >
+        docker exec {{ docker_container_name }} mysqldump -u{{ mysql_user }} -p{{ mysql_password }} {{ mysql_database }}
+      register: mysql_backup
+      ignore_errors: yes
+
+    - name: Enregistrer la sauvegarde dans un fichier
+      copy:
+        content: "{{ mysql_backup.stdout }}"
+        dest: "{{ backup_dir }}/{{ backup_filename }}"
+        mode: '0644'
+      when: mysql_backup.stdout is defined
+
+    - name: Compresser le fichier de sauvegarde
+      archive:
+        path: "{{ backup_dir }}/{{ backup_filename }}"
+        dest: "{{ backup_dir }}/{{ backup_filename }}.gz"
+        format: gz
+      when: mysql_backup.stdout is defined
+
+    - name: Supprimer le fichier de sauvegarde non compressé
+      file:
+        path: "{{ backup_dir }}/{{ backup_filename }}"
+        state: absent
+      when: mysql_backup.stdout is defined
+
