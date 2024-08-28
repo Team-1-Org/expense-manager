@@ -3,42 +3,47 @@ services:
   db:
     image: mysql:9.0
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
       MYSQL_DATABASE: expense_manager
     volumes:
       - db_data:/var/lib/mysql
     networks:
-      - app-network
+      - internal-network
     ports:
       - "3306:3306"
     deploy:
       replicas: 1
       restart_policy:
         condition: any
+    secrets:
+      - mysql_root_password
 
   # Node.js Backend
   backend:
-    image: yassird/expense-manager-backend:latest
+    image: yassird/expense-manager-backend:14
     environment:
       DB_HOST: db
       DB_USER: root
-      DB_PASSWORD: root
+      DB_PASSWORD_FILE: /run/secrets/mysql_root_password
       DB_NAME: expense_manager
       NODE_ENV: production
     depends_on:
       - db
     networks:
       - app-network
+      - internal-network
     ports:
       - "5000:5000"
     deploy:
       replicas: 2
       restart_policy:
         condition: any
+    secrets:
+      - mysql_root_password
 
   # React Frontend
   frontend:
-    image: yassird/expense-manager-frontend:latest
+    image: yassird/expense-manager-frontend:14
     depends_on:
       - backend
     ports:
@@ -52,7 +57,14 @@ services:
 
 networks:
   app-network:
-    driver: overlay   # Use overlay networks in Docker Swarm
+    driver: overlay
+  internal-network:
+    driver: overlay
+    internal: true
 
 volumes:
   db_data:
+
+secrets:
+  mysql_root_password:
+    external: true

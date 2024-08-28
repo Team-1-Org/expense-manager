@@ -1,4 +1,5 @@
 require('dotenv').config();
+const fs = require('fs');
 const express = require('express');
 const mysql = require('mysql2');
 const bodyParser = require('body-parser');
@@ -33,11 +34,16 @@ const appUpMetric = new client.Gauge({
 // Set the initial state of the app to up
 appUpMetric.set(1);
 
+let dbPassword = process.env.DB_PASSWORD;
+if (process.env.DB_PASSWORD_FILE) {
+  dbPassword = fs.readFileSync(process.env.DB_PASSWORD_FILE, 'utf8').trim();
+}
+
 // MySQL connection pooling configuration
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  password: dbPassword,
   database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 10,
