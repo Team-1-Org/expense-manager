@@ -40,6 +40,36 @@
         groups: docker
         append: yes
 
+- name: Configure automatic updates
+  hosts: all
+  become: yes
+  tasks:
+    - name: Install unattended-upgrades package
+      apt:
+        name: unattended-upgrades
+        state: present
+        update_cache: yes
+
+    - name: Install update-notifier-common package
+      apt:
+        name: update-notifier-common
+        state: present
+
+    - name: Configure automatic updates
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+          Unattended-Upgrade::Automatic-Reboot "false";
+
+    - name: Enable and start unattended-upgrades service
+      systemd:
+        name: unattended-upgrades
+        enabled: yes
+        state: started
+
 - name: Install additional services on one machine
   hosts: tooling_vms
   become: yes
@@ -105,7 +135,7 @@
 
     - name: Download Prometheus
       get_url:
-        url: https://github.com/prometheus/prometheus/releases/download/v2.30.3/prometheus-2.30.3.linux-amd64.tar.gz
+        url: https://github.com/prometheus/prometheus/releases/download/v2.45.0/prometheus-2.45.0.linux-amd64.tar.gz
         dest: /tmp/prometheus.tar.gz
 
     - name: Extract Prometheus
@@ -116,7 +146,7 @@
 
     - name: Change ownership of Prometheus files
       file:
-        path: /opt/prometheus-2.30.3.linux-amd64
+        path: /opt/prometheus-2.45.0.linux-amd64
         state: directory
         owner: prometheus
         group: prometheus
@@ -124,7 +154,7 @@
 
     - name: Create Prometheus data directory
       file:
-        path: /opt/prometheus-2.30.3.linux-amd64/data
+        path: /opt/prometheus-2.45.0.linux-amd64/data
         state: directory
         owner: prometheus
         group: prometheus
@@ -142,7 +172,7 @@
           User=prometheus
           Group=prometheus
           Type=simple
-          ExecStart=/opt/prometheus-2.30.3.linux-amd64/prometheus --config.file=/opt/prometheus-2.30.3.linux-amd64/prometheus.yml --storage.tsdb.path=/opt/prometheus-2.30.3.linux-amd64/data
+          ExecStart=/opt/prometheus-2.45.0.linux-amd64/prometheus --config.file=/opt/prometheus-2.45.0.linux-amd64/prometheus.yml --storage.tsdb.path=/opt/prometheus-2.45.0.linux-amd64/data
 
           [Install]
           WantedBy=multi-user.target
@@ -177,7 +207,7 @@
 
     - name: Download Alertmanager
       get_url:
-        url: https://github.com/prometheus/alertmanager/releases/download/v0.23.0/alertmanager-0.23.0.linux-amd64.tar.gz
+        url: https://github.com/prometheus/alertmanager/releases/download/v0.26.0/alertmanager-0.26.0.linux-amd64.tar.gz
         dest: /tmp/alertmanager.tar.gz
 
     - name: Extract Alertmanager
@@ -188,7 +218,7 @@
 
     - name: Change ownership of Alertmanager files
       file:
-        path: /opt/alertmanager-0.23.0.linux-amd64
+        path: /opt/alertmanager-0.26.0.linux-amd64
         state: directory
         owner: alertmanager
         group: alertmanager
@@ -196,7 +226,7 @@
 
     - name: Create Alertmanager data directory
       file:
-        path: /opt/alertmanager-0.23.0.linux-amd64/data
+        path: /opt/alertmanager-0.26.0.linux-amd64/data
         state: directory
         owner: alertmanager
         group: alertmanager
@@ -213,7 +243,7 @@
 
           receivers:
             - name: 'default'
-        dest: /opt/alertmanager-0.23.0.linux-amd64/alertmanager.yml
+        dest: /opt/alertmanager-0.26.0.linux-amd64/alertmanager.yml
         owner: alertmanager
         group: alertmanager
         mode: '0644'
@@ -230,7 +260,7 @@
           User=alertmanager
           Group=alertmanager
           Type=simple
-          ExecStart=/opt/alertmanager-0.23.0.linux-amd64/alertmanager --config.file=/opt/alertmanager-0.23.0.linux-amd64/alertmanager.yml --storage.path=/opt/alertmanager-0.23.0.linux-amd64/data
+          ExecStart=/opt/alertmanager-0.26.0.linux-amd64/alertmanager --config.file=/opt/alertmanager-0.26.0.linux-amd64/alertmanager.yml --storage.path=/opt/alertmanager-0.26.0.linux-amd64/data
 
           [Install]
           WantedBy=multi-user.target
@@ -251,9 +281,22 @@
   hosts: tooling_vms
   become: yes
   tasks:
+    - name: Add Grafana GPG key
+      apt_key:
+        url: https://packages.grafana.com/gpg.key
+        state: present
+
+    - name: Add Grafana repository
+      apt_repository:
+        repo: deb https://packages.grafana.com/oss/deb stable main
+        state: present
+        filename: grafana
+
     - name: Install Grafana
       apt:
-        deb: https://dl.grafana.com/oss/release/grafana_8.2.2_amd64.deb
+        name: grafana
+        state: latest
+        update_cache: yes
 
     - name: Enable and start Grafana service
       systemd:
@@ -270,6 +313,4 @@
         name: ansible
         state: present
         update_cache: yes
-
-
-
+        
