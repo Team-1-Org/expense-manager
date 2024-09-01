@@ -5,8 +5,8 @@
   vars:
     docker_compose_file: /home/yassirdiri/docker-stack.yml
     services:
-      - expense-manager_backend
-      - expense-manager_frontend
+      - expense-tracker_backend
+      - expense-tracker_frontend
     weekday_days: "1-5"  # Monday to Friday
     off_hours_start: "21:00"
     off_hours_end: "08:00"

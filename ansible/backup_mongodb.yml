@@ -1,0 +1,40 @@
+---
+- name: Setup MongoDB Backup Cron Job
+  hosts: app_vms
+  become: yes
+  vars:
+    mongo_service_name: "expense-tracker_mongodb"
+    backup_path: "/tmp/mongodb_backup"
+    gcs_bucket_name: "yas-bucket-44"
+    gcs_upload_path: "mongodb_backups/"
+    cron_job_name: "mongodb_backup_to_gcs"
+    cron_time: "0 17 * * 5"
+    script_path: "/usr/local/bin/mongodb_backup.sh"
+
+  tasks:
+    - name: Ensure backup directory exists
+      file:
+        path: "{{ backup_path }}"
+        state: directory
+
+    - name: Create MongoDB backup script
+      copy:
+        content: |
+          #!/bin/bash
+          container_id=$(docker service ps -q {{ mongo_service_name }} | head -n 1 | xargs docker inspect --format '{{ '{{.Status.ContainerStatus.ContainerID}}' }}')
+          backup_file="{{ backup_path }}/mongo_backup_$(date +\%Y-\%m-\%d).gz"
+          docker exec $container_id mongodump --archive --gzip > $backup_file
+          gsutil cp $backup_file gs://{{ gcs_bucket_name }}/{{ gcs_upload_path }}/
+          rm $backup_file
+        dest: "{{ script_path }}"
+        mode: '0755'
+
+    - name: Set up cron job for MongoDB backup
+      cron:
+        name: "{{ cron_job_name }}"
+        minute: "0"
+        hour: "17"
+        day: "*"
+        month: "*"
+        weekday: "5"
+        job: "{{ script_path }}"
