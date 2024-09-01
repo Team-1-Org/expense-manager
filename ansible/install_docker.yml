@@ -40,36 +40,6 @@
         groups: docker
         append: yes
 
-- name: Configure automatic updates
-  hosts: all
-  become: yes
-  tasks:
-    - name: Install unattended-upgrades package
-      apt:
-        name: unattended-upgrades
-        state: present
-        update_cache: yes
-
-    - name: Install update-notifier-common package
-      apt:
-        name: update-notifier-common
-        state: present
-
-    - name: Configure automatic updates
-      copy:
-        dest: /etc/apt/apt.conf.d/20auto-upgrades
-        content: |
-          APT::Periodic::Update-Package-Lists "1";
-          APT::Periodic::Unattended-Upgrade "1";
-          APT::Periodic::AutocleanInterval "7";
-          Unattended-Upgrade::Automatic-Reboot "false";
-
-    - name: Enable and start unattended-upgrades service
-      systemd:
-        name: unattended-upgrades
-        enabled: yes
-        state: started
-
 - name: Install additional services on one machine
   hosts: tooling_vms
   become: yes
